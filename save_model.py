@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from estimator_saver_without_global_step import export_saved_model
+
 import modeling
 import tensorflow as tf
 
@@ -120,9 +122,14 @@ def main(_):
 
     estimator = tf.estimator.Estimator(model_fn, model_dir, config, params)
 
-    estimator.export_saved_model(export_dir_base=FLAGS.export_dir,
-                                 checkpoint_path=FLAGS.init_checkpoint,
-                                 serving_input_receiver_fn=serving_input_receiver_fn())
+    # estimator.export_saved_model(export_dir_base=FLAGS.export_dir,
+    #                              checkpoint_path=FLAGS.init_checkpoint,
+    #                              serving_input_receiver_fn=serving_input_receiver_fn())
+
+    export_saved_model(estimator=estimator,
+                       export_dir_base=FLAGS.export_dir,
+                       checkpoint_path=FLAGS.init_checkpoint,
+                       serving_input_receiver_fn=serving_input_receiver_fn())
 
 
 # python save_model.py --bert_config_file=/Users/yzq/Work/github/bert/multilingual_L-12_H-768_A-12/bert_config.json

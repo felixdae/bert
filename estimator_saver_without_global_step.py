@@ -1,23 +1,31 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from tensorflow.python.client import session as tf_session
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
-from tensorflow.python.training import checkpoint_management
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import random_seed
 from tensorflow.python.estimator.export import export as export_helpers
 from tensorflow.python.training import monitored_session
 from tensorflow.python.platform import gfile
 from tensorflow.python.training import saver
+from tensorflow.python.framework import errors
+from tensorflow.python.saved_model import builder as saved_model_builder
 
-def _add_meta_graph_for_mode(self,
-                             builder,
-                             input_receiver_fn_map,
-                             checkpoint_path,
-                             # strip_default_attrs,
-                             save_variables=True,
-                             mode=model_fn_lib.ModeKeys.PREDICT,
-                             export_tags=None,
-                             check_variables=True):
+
+def _add_meta_graph_for_mode(  # self,
+        estimator,
+        builder,
+        # input_receiver_fn_map,
+        input_receiver_fn,
+        checkpoint_path,
+        # strip_default_attrs,
+        save_variables=True,
+        mode=model_fn_lib.ModeKeys.PREDICT,
+        export_tags=None,
+        check_variables=True):
     # pylint: disable=line-too-long
     """Loads variables and adds them along with a `tf.MetaGraphDef` for saving.
 
@@ -50,20 +58,20 @@ def _add_meta_graph_for_mode(self,
     # pylint: enable=line-too-long
     if export_tags is None:
         export_tags = model_fn_lib.EXPORT_TAG_MAP[mode]
-    input_receiver_fn = input_receiver_fn_map[mode]
+    # input_receiver_fn = input_receiver_fn_map[mode]
 
     with ops.Graph().as_default() as g:
-        self._create_and_assert_global_step(g)
-        random_seed.set_random_seed(self._config.tf_random_seed)
+        # estimator._create_and_assert_global_step(g)
+        random_seed.set_random_seed(estimator._config.tf_random_seed)
 
         input_receiver = input_receiver_fn()
 
         # Call the model_fn and collect the export_outputs.
-        estimator_spec = self._call_model_fn(
+        estimator_spec = estimator._call_model_fn(
             features=input_receiver.features,
             labels=getattr(input_receiver, 'labels', None),
             mode=mode,
-            config=self.config)
+            config=estimator.config)
 
         export_outputs = model_fn_lib.export_outputs_for_mode(
             mode=estimator_spec.mode,
@@ -79,7 +87,7 @@ def _add_meta_graph_for_mode(self,
             getattr(input_receiver, 'receiver_tensors_alternatives', None),
             serving_only=(mode == model_fn_lib.ModeKeys.PREDICT))
 
-        with tf_session.Session(config=self._session_config) as session:
+        with tf_session.Session(config=estimator._session_config) as session:
 
             if estimator_spec.scaffold.local_init_op is not None:
                 local_init_op = estimator_spec.scaffold.local_init_op
@@ -117,7 +125,7 @@ def _add_meta_graph_for_mode(self,
                 signature_def_map=signature_def_map,
                 assets_collection=ops.get_collection(
                     ops.GraphKeys.ASSET_FILEPATHS),
-                strip_default_attrs=strip_default_attrs,
+                strip_default_attrs=True,
                 legacy_init_op=local_init_op,
                 saver=graph_saver)
 
@@ -130,10 +138,10 @@ def _add_meta_graph_for_mode(self,
 
 def export_saved_model(estimator, export_dir_base, checkpoint_path, serving_input_receiver_fn):
     # pylint: enable=line-too-long
-    if not input_receiver_fn:
-        raise ValueError('An input_receiver_fn must be defined.')
+    # if not input_receiver_fn:
+    #     raise ValueError('An input_receiver_fn must be defined.')
 
-    input_receiver_fn_map = {mode: input_receiver_fn}
+    # input_receiver_fn_map = {mode: input_receiver_fn}
 
     # return self._export_all_saved_models(
     #     export_dir_base,
@@ -146,12 +154,12 @@ def export_saved_model(estimator, export_dir_base, checkpoint_path, serving_inpu
     # pylint: enable=line-too-long
     # TODO(b/65561022): Consider allowing multiple input_receiver_fns per mode.
     with context.graph_mode():
-        if not checkpoint_path:
-            # Locate the latest checkpoint
-            checkpoint_path = checkpoint_management.latest_checkpoint(
-                self._model_dir)
-        if not checkpoint_path:
-            raise ValueError("Couldn't find trained model at %s." % self._model_dir)
+        # if not checkpoint_path:
+        #     # Locate the latest checkpoint
+        #     checkpoint_path = checkpoint_management.latest_checkpoint(
+        #         self._model_dir)
+        # if not checkpoint_path:
+        #     raise ValueError("Couldn't find trained model at %s." % self._model_dir)
 
         export_dir = export_helpers.get_timestamped_export_dir(export_dir_base)
         temp_export_dir = export_helpers.get_temp_export_dir(export_dir)
@@ -164,42 +172,46 @@ def export_saved_model(estimator, export_dir_base, checkpoint_path, serving_inpu
         # first, as that is also the mode used for checkpoints, and therefore
         # we are not likely to have vars in PREDICT that are not in the checkpoint
         # created by TRAIN.
-        if input_receiver_fn_map.get(model_fn_lib.ModeKeys.TRAIN):
-            self._add_meta_graph_for_mode(
-                builder, input_receiver_fn_map, checkpoint_path,
-                strip_default_attrs, save_variables,
-                mode=model_fn_lib.ModeKeys.TRAIN)
-            save_variables = False
-        if input_receiver_fn_map.get(model_fn_lib.ModeKeys.EVAL):
-            self._add_meta_graph_for_mode(
-                builder, input_receiver_fn_map, checkpoint_path,
-                strip_default_attrs, save_variables,
-                mode=model_fn_lib.ModeKeys.EVAL)
-            save_variables = False
-        if input_receiver_fn_map.get(model_fn_lib.ModeKeys.PREDICT):
-            self._add_meta_graph_for_mode(
-                builder, input_receiver_fn_map, checkpoint_path,
-                strip_default_attrs, save_variables,
-                mode=model_fn_lib.ModeKeys.PREDICT)
-            save_variables = False
+        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.TRAIN):
+        #     self._add_meta_graph_for_mode(
+        #         builder, input_receiver_fn_map, checkpoint_path,
+        #         strip_default_attrs, save_variables,
+        #         mode=model_fn_lib.ModeKeys.TRAIN)
+        #     save_variables = False
+        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.EVAL):
+        #     self._add_meta_graph_for_mode(
+        #         builder, input_receiver_fn_map, checkpoint_path,
+        #         strip_default_attrs, save_variables,
+        #         mode=model_fn_lib.ModeKeys.EVAL)
+        #     save_variables = False
+        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.PREDICT):
+        # self._add_meta_graph_for_mode(
+        #     builder, input_receiver_fn_map, checkpoint_path,
+        #     strip_default_attrs, save_variables,
+        #     mode=model_fn_lib.ModeKeys.PREDICT)
+        _add_meta_graph_for_mode(
+            estimator,
+            builder,
+            serving_input_receiver_fn,
+            checkpoint_path,
+            save_variables)
+        save_variables = False
 
         if save_variables:
-            raise ValueError('No valid modes for exporting found. Got {}.'.format(
-                input_receiver_fn_map.keys()))
+            raise ValueError('No valid modes for exporting found.')
 
-        # builder.save(as_text)
+    # builder.save(as_text)
 
-        # # Add the extra assets
-        # if assets_extra:
-        #   assets_extra_path = os.path.join(compat.as_bytes(temp_export_dir),
-        #                                    compat.as_bytes('assets.extra'))
-        #   for dest_relative, source in assets_extra.items():
-        #     dest_absolute = os.path.join(compat.as_bytes(assets_extra_path),
-        #                                  compat.as_bytes(dest_relative))
-        #     dest_path = os.path.dirname(dest_absolute)
-        #     gfile.MakeDirs(dest_path)
-        #     gfile.Copy(source, dest_absolute)
+    # # Add the extra assets
+    # if assets_extra:
+    #   assets_extra_path = os.path.join(compat.as_bytes(temp_export_dir),
+    #                                    compat.as_bytes('assets.extra'))
+    #   for dest_relative, source in assets_extra.items():
+    #     dest_absolute = os.path.join(compat.as_bytes(assets_extra_path),
+    #                                  compat.as_bytes(dest_relative))
+    #     dest_path = os.path.dirname(dest_absolute)
+    #     gfile.MakeDirs(dest_path)
+    #     gfile.Copy(source, dest_absolute)
 
-        gfile.Rename(temp_export_dir, export_dir)
-        return export_dir
-
+    gfile.Rename(temp_export_dir, export_dir)
+    return export_dir
