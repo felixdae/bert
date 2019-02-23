@@ -21,6 +21,10 @@ flags.DEFINE_string(
     "Initial checkpoint (usually from a pre-trained BERT model).")
 
 flags.DEFINE_string(
+    "model_dir", None,
+    "mode dir")
+
+flags.DEFINE_string(
     "export_dir", None,
     "mode saved dir")
 
@@ -58,6 +62,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes):
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""
 
+        print("test params: :", params)
         unique_ids = features["unique_ids"]
         input_ids = features["input_ids"]
         input_mask = features["input_mask"]
@@ -78,14 +83,6 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes):
          initialized_variable_names) = modeling.get_assignment_map_from_checkpoint(
             tvars, init_checkpoint)
         tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-
-        print(100 * "-")
-        for kv in assignment_map:
-            print("global" in kv, kv)
-        print(100 * "-")
-        for kv in initialized_variable_names:
-            print(kv)
-        print(100 * "+")
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -117,9 +114,9 @@ def main(_):
     model_fn = model_fn_builder(layer_indexes=layer_indexes,
                                 bert_config=bert_config,
                                 init_checkpoint=FLAGS.init_checkpoint)
-    model_dir = None
+    model_dir = FLAGS.model_dir
     config = None
-    params = None
+    params = {"hello": "world"}
 
     estimator = tf.estimator.Estimator(model_fn, model_dir, config, params)
 
@@ -127,6 +124,14 @@ def main(_):
                                  checkpoint_path=FLAGS.init_checkpoint,
                                  serving_input_receiver_fn=serving_input_receiver_fn())
 
+
+# python save_model.py --bert_config_file=/Users/yzq/Work/github/bert/multilingual_L-12_H-768_A-12/bert_config.json
+# --init_checkpoint=/Users/yzq/Work/github/bert/multilingual_L-12_H-768_A-12/bert_model.ckpt
+# --export_dir=./saved_model --model_dir=./model_dir
+
+# if error with "Key global_step not found in checkpoint", you should comment this line link below
+# https://github.com/tensorflow/estimator/blob/a9e39420b761b95fefa5e07b01ca7bd7c9fcf217/tensorflow_estimator/python
+# /estimator/estimator.py#L894
 
 if __name__ == '__main__':
     flags.mark_flag_as_required("bert_config_file")
