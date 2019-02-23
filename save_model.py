@@ -129,7 +129,8 @@ def main(_):
     export_saved_model(estimator=estimator,
                        export_dir_base=FLAGS.export_dir,
                        checkpoint_path=FLAGS.init_checkpoint,
-                       serving_input_receiver_fn=serving_input_receiver_fn())
+                       serving_input_receiver_fn=serving_input_receiver_fn(),
+                       as_text=True)
 
 
 # python save_model.py --bert_config_file=/Users/yzq/Work/github/bert/multilingual_L-12_H-768_A-12/bert_config.json

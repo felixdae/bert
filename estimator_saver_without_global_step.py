@@ -15,53 +15,19 @@ from tensorflow.python.framework import errors
 from tensorflow.python.saved_model import builder as saved_model_builder
 
 
-def _add_meta_graph_for_mode(  # self,
+def _add_meta_graph_for_mode(
         estimator,
         builder,
-        # input_receiver_fn_map,
         input_receiver_fn,
         checkpoint_path,
-        # strip_default_attrs,
         save_variables=True,
         mode=model_fn_lib.ModeKeys.PREDICT,
         export_tags=None,
         check_variables=True):
-    # pylint: disable=line-too-long
-    """Loads variables and adds them along with a `tf.MetaGraphDef` for saving.
-
-    Args:
-      builder: instance of `tf.saved_modle.builder.SavedModelBuilder` that will
-        be used for saving.
-      input_receiver_fn_map: dict of `tf.estimator.ModeKeys` to
-        `input_receiver_fn` mappings, where the `input_receiver_fn` is a
-        function that takes no argument and returns the appropriate subclass of
-        `InputReceiver`.
-      checkpoint_path: The checkpoint path to export.  If `None` (the default),
-        the most recent checkpoint found within the model directory is chosen.
-      strip_default_attrs: Boolean. If `True`, default-valued attributes will be
-        removed from the `NodeDef`s. For a detailed guide, see [Stripping
-        Default-Valued
-        Attributes](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/saved_model/README.md#stripping-default-valued-attributes).
-      save_variables: bool, whether variables should be saved. If `False`, just
-        the `tf.MetaGraphDef` will be saved. Note that `save_variables` should
-        only be `True` for the first call to this function, and the
-        `SavedModelBuilder` will raise an error if that is not the case.
-      mode: `tf.estimator.ModeKeys` value indicating which mode will be
-        exported.
-      export_tags: The set of tags with which to save `tf.MetaGraphDef`. If
-        `None`, a default set will be selected to matched the passed mode.
-      check_variables: bool, whether to check the checkpoint has all variables.
-
-    Raises:
-      ValueError: if `save_variables` is `True` and `check_variable` is `False`.
-    """
-    # pylint: enable=line-too-long
     if export_tags is None:
         export_tags = model_fn_lib.EXPORT_TAG_MAP[mode]
-    # input_receiver_fn = input_receiver_fn_map[mode]
 
     with ops.Graph().as_default() as g:
-        # estimator._create_and_assert_global_step(g)
         random_seed.set_random_seed(estimator._config.tf_random_seed)
 
         input_receiver = input_receiver_fn()
@@ -136,59 +102,18 @@ def _add_meta_graph_for_mode(  # self,
                 builder.add_meta_graph(**meta_graph_kwargs)
 
 
-def export_saved_model(estimator, export_dir_base, checkpoint_path, serving_input_receiver_fn):
-    # pylint: enable=line-too-long
-    # if not input_receiver_fn:
-    #     raise ValueError('An input_receiver_fn must be defined.')
-
-    # input_receiver_fn_map = {mode: input_receiver_fn}
-
-    # return self._export_all_saved_models(
-    #     export_dir_base,
-    #     input_receiver_fn_map,
-    #     assets_extra=assets_extra,
-    #     as_text=as_text,
-    #     checkpoint_path=checkpoint_path,
-    #     strip_default_attrs=strip_default_attrs)
-
-    # pylint: enable=line-too-long
-    # TODO(b/65561022): Consider allowing multiple input_receiver_fns per mode.
+def export_saved_model(estimator,
+                       export_dir_base,
+                       checkpoint_path,
+                       serving_input_receiver_fn,
+                       as_text=False):
     with context.graph_mode():
-        # if not checkpoint_path:
-        #     # Locate the latest checkpoint
-        #     checkpoint_path = checkpoint_management.latest_checkpoint(
-        #         self._model_dir)
-        # if not checkpoint_path:
-        #     raise ValueError("Couldn't find trained model at %s." % self._model_dir)
-
         export_dir = export_helpers.get_timestamped_export_dir(export_dir_base)
         temp_export_dir = export_helpers.get_temp_export_dir(export_dir)
 
         builder = saved_model_builder.SavedModelBuilder(temp_export_dir)
 
         save_variables = True
-        # Note that the order in which we run here matters, as the first
-        # mode we pass through will be used to save the variables. We run TRAIN
-        # first, as that is also the mode used for checkpoints, and therefore
-        # we are not likely to have vars in PREDICT that are not in the checkpoint
-        # created by TRAIN.
-        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.TRAIN):
-        #     self._add_meta_graph_for_mode(
-        #         builder, input_receiver_fn_map, checkpoint_path,
-        #         strip_default_attrs, save_variables,
-        #         mode=model_fn_lib.ModeKeys.TRAIN)
-        #     save_variables = False
-        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.EVAL):
-        #     self._add_meta_graph_for_mode(
-        #         builder, input_receiver_fn_map, checkpoint_path,
-        #         strip_default_attrs, save_variables,
-        #         mode=model_fn_lib.ModeKeys.EVAL)
-        #     save_variables = False
-        # if input_receiver_fn_map.get(model_fn_lib.ModeKeys.PREDICT):
-        # self._add_meta_graph_for_mode(
-        #     builder, input_receiver_fn_map, checkpoint_path,
-        #     strip_default_attrs, save_variables,
-        #     mode=model_fn_lib.ModeKeys.PREDICT)
         _add_meta_graph_for_mode(
             estimator,
             builder,
@@ -197,21 +122,9 @@ def export_saved_model(estimator, export_dir_base, checkpoint_path, serving_inpu
             save_variables)
         save_variables = False
 
+        builder.save(as_text)
         if save_variables:
             raise ValueError('No valid modes for exporting found.')
-
-    # builder.save(as_text)
-
-    # # Add the extra assets
-    # if assets_extra:
-    #   assets_extra_path = os.path.join(compat.as_bytes(temp_export_dir),
-    #                                    compat.as_bytes('assets.extra'))
-    #   for dest_relative, source in assets_extra.items():
-    #     dest_absolute = os.path.join(compat.as_bytes(assets_extra_path),
-    #                                  compat.as_bytes(dest_relative))
-    #     dest_path = os.path.dirname(dest_absolute)
-    #     gfile.MakeDirs(dest_path)
-    #     gfile.Copy(source, dest_absolute)
 
     gfile.Rename(temp_export_dir, export_dir)
     return export_dir
